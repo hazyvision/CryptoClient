@@ -5,6 +5,7 @@
 //
 
 import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
@@ -17,6 +18,9 @@ import java.util.Random;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.xml.bind.DatatypeConverter;
+
+import javax.crypto.*;
+import java.security.*;
 
 public class CryptoClient {
     //Initialize Global Variables
@@ -32,29 +36,27 @@ public class CryptoClient {
     static int srcAddress = 0xC0A811A; //192.168.1.26
     static int destAddress = 0x4C5B7B61; //76.91.123.97
     static long totalTime = 0;
-    static short fillerPort = 0x420;
+   // static short fillerPort = 0x420;
     //System.currentTimeMillis();
 	public static void main(String[] args) throws Exception {
 		@SuppressWarnings("resource")
 		Socket socket = new Socket("45.50.5.238", 38008);
 		//Socket socket = new Socket("76.91.123.97", 38008);
-		ObjectInputStream fromServer = new ObjectInputStream(socket.getInputStream());
-		ObjectOutputStream toServer = new ObjectOutputStream(socket.getOutputStream());
-		
+		System.out.println(socket);
+		InputStream fromServer = socket.getInputStream();
+		OutputStream toServer = socket.getOutputStream();
 		//file path for local machine
 		String filePath = "/home/adriene/Dropbox/CS380/Projects/Proj8/src/public.bin";
 		
 		//filepath for submission
 		//String filePath = "public.bin";
-		ObjectInputStream rsaPuKey = new ObjectInputStream(new FileInputStream(filePath));
+		ObjectInputStream rsaPuKey = new ObjectInputStream(new FileInputStream(filePath));;
 		
 		//read from the file in to an instance of RSAPublicKey.
 		RSAPublicKey rsaPublicKey =  (RSAPublicKey) rsaPuKey.readObject();
 		
 		//Use an instance of Cipher with the public key
-		Cipher cipher = Cipher.getInstance("RSA");
-		
-		
+		Cipher cipher = Cipher.getInstance("AES");
 		
 		//close public.bin file
 		rsaPuKey.close();
@@ -67,19 +69,19 @@ public class CryptoClient {
 		ByteBuffer sesh_Arr_Buf = ByteBuffer.wrap(sesh_Arr);
 		
 		//Encrypt serialized session key with given public key
-		cipher.init(Cipher.ENCRYPT_MODE,aes_sesh_key);
+		cipher.init(Cipher.ENCRYPT_MODE,aes_sesh_key);//<-----------------------------------Error is here
 		byte[] cipherText = cipher.doFinal(sesh_Arr);
-		System.out.println(new String(cipherText));
-				
+		//System.out.println(new String(cipherText));
+			
+		ByteBuffer initBuf = ByteBuffer.wrap(cipherText);
 		//Send resulting cipher text as data in UDP toServer
-		byte[] initialPacket = generateIpv4(generateUdp(cipherText,fillerPort)); 
-		ByteBuffer initBuf = ByteBuffer.wrap(initialPacket);
+		
+		byte[] initialPacket = generateIpv4(generateUdp(cipherText,destAddress)); 
 		
 		toServer.write(initialPacket);
 		byte[] response1 = new byte[4];
 		fromServer.read(response1);
-		
-		System.out.println(DatatypeConverter.printHexBinary(response1));
+		System.out.println("server> "+DatatypeConverter.printHexBinary(response1));
 	}// end main
     public static byte[] generateIpv4(byte[] data) {
         checksum = 0;
