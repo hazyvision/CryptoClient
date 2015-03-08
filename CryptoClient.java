@@ -42,7 +42,7 @@ public class CryptoClient {
 		InputStream fromServer = socket.getInputStream();
 		OutputStream toServer = socket.getOutputStream();
 		
-		//filepath for submission
+		
 		String filePath = "public.bin";
 		ObjectInputStream rsaPuKey = new ObjectInputStream(new FileInputStream(filePath));;
 		
@@ -81,6 +81,7 @@ public class CryptoClient {
 		//Change cipher instance to AES because the Session key is using AES
 		cipher = Cipher.getInstance("AES");
 		cipher.init(Cipher.ENCRYPT_MODE,aes_sesh_key);
+		
 		int dataSize = 2;
 		//Begin sending encrypted packets with dummy data
 		double totalTime = 0;
@@ -95,7 +96,7 @@ public class CryptoClient {
 			double time = stop-start;
 			System.out.println("Packet # " + i );
 			System.out.println("server> "+DatatypeConverter.printHexBinary(serResponse));
-			System.out.println("Time: " + time + "ms\n" );
+			System.out.println("RTT: " + time + "ms\n" );
 			totalTime+=time;
 			dataSize = dataSize*2;	
 		}	
@@ -166,7 +167,8 @@ public class CryptoClient {
            udpHeaderWrap.putShort((short)pseudoChecksum); 
            udpHeaderWrap.put(data);
            return udpHeader;
-    } //End generateUdp
+    } //end generateUdp
+    
     public static short checksum_Funct(ByteBuffer bb, byte hlen){
         short checksum;
         int num = 0;
@@ -179,6 +181,7 @@ public class CryptoClient {
         bb.putShort(10,checksum);
         return checksum;
     }//end checksum_Funct
+    
     public static short checksum_Funct2(int port,int length, short checksum, byte[] data){
      ByteBuffer header = ByteBuffer.allocate(length);
      header.putShort((short) fillerPort);
@@ -206,6 +209,7 @@ public class CryptoClient {
      short result = (short) (~sum & 0xFFFF);
      return result;
   }//end checksum_funct2
+    
   public static byte[] generateRandomData(int size){
      Random r = new Random();
 	 byte[] randomArr = new byte[size];
@@ -214,4 +218,5 @@ public class CryptoClient {
 	 }
 	 return randomArr;
   } // end Function generateRandomData
+  
 }//end class CryptoClient
