@@ -4,12 +4,20 @@
 //Due: 3.13.2015
 //
 
+import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.security.Key;
+import java.security.interfaces.RSAPublicKey;
 import java.util.Random;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.xml.bind.DatatypeConverter;
 
 public class CryptoClient {
     //Initialize Global Variables
@@ -25,22 +33,79 @@ public class CryptoClient {
     static int srcAddress = 0xC0A811A; //192.168.1.26
     static int destAddress = 0x4C5B7B61; //76.91.123.97
     static long totalTime = 0;
-    //System.currentTimeMillis();
+   static short fillerPort = 0x420;
+   static short destPort = (short)38008;
 	public static void main(String[] args) throws Exception {
 		Socket socket = new Socket("45.50.5.238", 38008);
-		//file path for local machine
-		String filePath = "/home/adriene/Dropbox/CS380/Projects/Proj8/src/public.bin";
+		System.out.println("server> Ip: "+socket.getInetAddress().getHostAddress() +"; Port#: "+socket.getPort());
+		System.out.println("\nAuthenticating session key...\n");
+		InputStream fromServer = socket.getInputStream();
+		OutputStream toServer = socket.getOutputStream();
 		
-		//filepath for submission
-		//String filePath = "public.bin";
 		
-		ObjectInputStream rsaPuKey = new ObjectInputStream(new FileInputStream(filePath));
-		System.out.println(rsaPuKey.read());
+		String filePath = "public.bin";
+		ObjectInputStream rsaPuKey = new ObjectInputStream(new FileInputStream(filePath));;
 		
-		ObjectInputStream toServer = new ObjectInputStream(socket.getInputStream());
-		ObjectOutputStream fromServer = new ObjectOutputStream(socket.getOutputStream());
+		//read from the file in to an instance of RSAPublicKey.
+		RSAPublicKey rsaPublicKey =  (RSAPublicKey) rsaPuKey.readObject();
 		
+		//Use an instance of Cipher with the public key
+		Cipher cipher = Cipher.getInstance("RSA");
+		
+		//close public.bin file
+		rsaPuKey.close();
+		
+		//Generate AES session key
+		Key aes_sesh_key = KeyGenerator.getInstance("AES").generateKey();
+	
+		//Serialize the session key
+		ByteArrayOutputStream serializeKey = new ByteArrayOutputStream();
+		ObjectOutputStream oos = new ObjectOutputStream(serializeKey);
+		oos.writeObject(aes_sesh_key);
+		byte[] sesh_key = serializeKey.toByteArray();
+	
+		//Encrypt serialized session key with given public key
+		cipher.init(Cipher.ENCRYPT_MODE,rsaPublicKey);
+		byte[] cipherText = cipher.doFinal(sesh_key);
+			
+		//Send resulting cipher text as data in UDP
+		byte[] initialPacket = generateIpv4(generateUdp(cipherText)); 
+		
+		toServer.write(initialPacket);
+		byte[] response1 = new byte[4];
+		fromServer.read(response1);
+		System.out.println("server> "+DatatypeConverter.printHexBinary(response1));
+		System.out.println("\nServer has authenticated session key.");
+		System.out.println("Sending 10 encrypted udp packets...\n");
+		
+		//Change cipher instance to AES because the Session key is using AES
+		cipher = Cipher.getInstance("AES");
+		cipher.init(Cipher.ENCRYPT_MODE,aes_sesh_key);
+		
+		int dataSize = 2;
+		//Begin sending encrypted packets with dummy data
+		double totalTime = 0;
+		for(int i = 1; i <=10;i++){
+			double start = System.currentTimeMillis();
+			byte[] packet = generateIpv4(generateUdp(generateRandomData(dataSize)));
+			byte[] enPacket = cipher.doFinal(packet);	
+			toServer.write(enPacket);
+			byte[] serResponse = new byte[4];
+			fromServer.read(serResponse);
+			double stop = System.currentTimeMillis();
+			double time = stop-start;
+			System.out.println("Packet # " + i );
+			System.out.println("server> "+DatatypeConverter.printHexBinary(serResponse));
+			System.out.println("RTT: " + time + "ms\n" );
+			totalTime+=time;
+			dataSize = dataSize*2;	
+		}	
+		System.out.println("All packets sent successfully.");
+		System.out.println("AvgRTT: " + totalTime/10.0 + "ms\n");
+		System.out.println("Socket is now closing...");
+		socket.close();
 	}// end main
+	
     public static byte[] generateIpv4(byte[] data) {
         checksum = 0;
         int dataLength = data.length;
@@ -63,7 +128,7 @@ public class CryptoClient {
         bb.put(data);
         return header;
     }// End generateIpv4
-    public static byte[] generateUdp(byte[] data, int udpDestAddress){
+    public static byte[] generateUdp(byte[] data){
         //Start PseudoHeader-------------------------------------------
            int pseudoSrcAddress = srcAddress;
            int pseudoDestAddress = destAddress;
@@ -81,30 +146,29 @@ public class CryptoClient {
            pseudoBuf.put(pseudoProtocol);               
            pseudoBuf.putShort(pseudoUdpLength);
 
-           pseudoBuf.putShort((short)udpDestAddress);
-           pseudoBuf.putShort((short)udpDestAddress);
+           pseudoBuf.putShort((short)fillerPort);
+           pseudoBuf.putShort((short)destPort);
 
            short udpLength= (short) (8 + dataSize);
            pseudoBuf.putShort(udpLength); 
            pseudoBuf.put(data);          
            
            //Calculate Checksum on PseudoHeader
-           pseudoChecksum = checksum_Funct2(udpDestAddress, udpLength, checksum, data);
+           pseudoChecksum = checksum_Funct2(destPort, udpLength, checksum, data);
            //End PseudoHeader----------------------------------------------------------
            
-           short udpSrcAddress = (short)udpDestAddress;
-           //From handshake
            int udpDataSize = data.length;
            //Wrap udpHeader and data and return
            byte[] udpHeader = new byte[8 + udpDataSize]; 
            ByteBuffer udpHeaderWrap = ByteBuffer.wrap(udpHeader);
-           udpHeaderWrap.putShort((short)udpSrcAddress);
-           udpHeaderWrap.putShort((short)udpDestAddress);
+           udpHeaderWrap.putShort((short)fillerPort);
+           udpHeaderWrap.putShort((short)destPort);
            udpHeaderWrap.putShort((short)udpLength); 
            udpHeaderWrap.putShort((short)pseudoChecksum); 
            udpHeaderWrap.put(data);
            return udpHeader;
-       } //End generateUdp
+    } //end generateUdp
+    
     public static short checksum_Funct(ByteBuffer bb, byte hlen){
         short checksum;
         int num = 0;
@@ -116,10 +180,11 @@ public class CryptoClient {
         checksum = (short) (~num & 0xFFFF);
         bb.putShort(10,checksum);
         return checksum;
-      }//end checksum_Funct
+    }//end checksum_Funct
+    
     public static short checksum_Funct2(int port,int length, short checksum, byte[] data){
      ByteBuffer header = ByteBuffer.allocate(length);
-     header.putShort((short) port);
+     header.putShort((short) fillerPort);
      header.putShort((short) port);
      header.putShort((short) length);
      header.putShort((short) 0);
@@ -144,6 +209,7 @@ public class CryptoClient {
      short result = (short) (~sum & 0xFFFF);
      return result;
   }//end checksum_funct2
+    
   public static byte[] generateRandomData(int size){
      Random r = new Random();
 	 byte[] randomArr = new byte[size];
@@ -151,5 +217,6 @@ public class CryptoClient {
 	    randomArr[i] = (byte)r.nextInt();
 	 }
 	 return randomArr;
-	} // end Function generateRandomData
+  } // end Function generateRandomData
+  
 }//end class CryptoClient
