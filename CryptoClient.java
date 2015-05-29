@@ -44,7 +44,7 @@ public class CryptoClient {
 		
 		
 		String filePath = "public.bin";
-		ObjectInputStream rsaPuKey = new ObjectInputStream(new FileInputStream(filePath));;
+		ObjectInputStream rsaPuKey = new ObjectInputStream(new FileInputStream(filePath));
 		
 		//read from the file in to an instance of RSAPublicKey.
 		RSAPublicKey rsaPublicKey =  (RSAPublicKey) rsaPuKey.readObject();
@@ -129,34 +129,8 @@ public class CryptoClient {
         return header;
     }// End generateIpv4
     public static byte[] generateUdp(byte[] data){
-        //Start PseudoHeader-------------------------------------------
-           int pseudoSrcAddress = srcAddress;
-           int pseudoDestAddress = destAddress;
-           byte zeros = 0;
-           byte pseudoProtocol = 17;
            int dataSize = data.length;
-           short pseudoUdpLength= (short) (8 + dataSize);
-           short pseudoChecksum = 0;
-           
-           byte[] psuedoHeader = new byte[20 + dataSize]; 
-           ByteBuffer pseudoBuf = ByteBuffer.wrap(psuedoHeader);
-           pseudoBuf.putInt(pseudoSrcAddress);
-           pseudoBuf.putInt(pseudoDestAddress);
-           pseudoBuf.put(zeros);
-           pseudoBuf.put(pseudoProtocol);               
-           pseudoBuf.putShort(pseudoUdpLength);
-
-           pseudoBuf.putShort((short)fillerPort);
-           pseudoBuf.putShort((short)destPort);
-
            short udpLength= (short) (8 + dataSize);
-           pseudoBuf.putShort(udpLength); 
-           pseudoBuf.put(data);          
-           
-           //Calculate Checksum on PseudoHeader
-           pseudoChecksum = checksum_Funct2(destPort, udpLength, checksum, data);
-           //End PseudoHeader----------------------------------------------------------
-           
            int udpDataSize = data.length;
            //Wrap udpHeader and data and return
            byte[] udpHeader = new byte[8 + udpDataSize]; 
@@ -164,7 +138,7 @@ public class CryptoClient {
            udpHeaderWrap.putShort((short)fillerPort);
            udpHeaderWrap.putShort((short)destPort);
            udpHeaderWrap.putShort((short)udpLength); 
-           udpHeaderWrap.putShort((short)pseudoChecksum); 
+           udpHeaderWrap.putShort((short)checksum_Funct2(destPort, udpLength, checksum, data)); 
            udpHeaderWrap.put(data);
            return udpHeader;
     } //end generateUdp
